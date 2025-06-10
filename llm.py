@@ -39,7 +39,7 @@ def get_retrievalQA():
     database = get_database()
     llm = get_llm()
     prompt = hub.pull(
-        "rlm/rag-prompt",
+        "moon/rag-prompt",
         api_key=LANGCHAIN_API_KEY,
     )
 
