@@ -21,10 +21,10 @@ if inputchat := st.chat_input(placeholder="전세사기 피해와 관련된 질�
     
     # 답변 나올 때까지 스피너 
     with st.spinner("답변을 생성하는 중입니다."):
-        aimessage = get_aimessage(inputchat)
+        aimessage = get_aimessage(inputchat, session_id='default')
         
         with st.chat_message("ai"):
             st.write(aimessage)
         st.session_state.message_list.append({'role': 'ai', 'content': aimessage})
 
-
+print(st.session_state.message_list)
