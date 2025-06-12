@@ -24,7 +24,7 @@ if inputchat := st.chat_input(placeholder="전세사기 피해와 관련된 질�
         aimessage = get_aimessage(inputchat, session_id='default')
         
         with st.chat_message("ai"):
-            st.write(aimessage)
+            aimessage = st.write_stream(aimessage)
         st.session_state.message_list.append({'role': 'ai', 'content': aimessage})
 
-print(st.session_state.message_list)
+

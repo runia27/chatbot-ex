@@ -1,16 +1,16 @@
 import os
 
 from dotenv import load_dotenv
-from langchain_core.chat_history import BaseChatMessageHistory
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnableLambda
-from langchain_core.runnables.history import RunnableWithMessageHistory
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain.chains import (create_history_aware_retriever,
+                              create_retrieval_chain)
+from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_community.chat_message_histories import ChatMessageHistory
+from langchain_core.chat_history import BaseChatMessageHistory
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.runnables.history import RunnableWithMessageHistory
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_pinecone import PineconeVectorStore
 from pinecone import Pinecone
-
 
 
 load_dotenv()
@@ -49,7 +49,27 @@ def get_session_history(session_id: str) -> BaseChatMessageHistory:
 def get_retrievalQA():
 
     database = get_database()
+    retriever = database.as_retriever(search_kwargs={'k': 2})
     llm = get_llm()
+
+    question_prompt = ('''
+- 사용자의 질문이 이전 대화 맥락을 참조한다면, 이를 바탕으로 누구나 이해할 수 있도록 질문을 완전한 문장으로 재작성합니다.
+- 질문이 이미 독립적인 문장이라면 그대로 반환합니다.
+- 답변은 하지 않고, 오직 질문만 출력합니다.
+- 항상 질문 형태로 끝나야 하며, 문장은 정확하고 명확해야 합니다.
+
+''')
+
+    contextualize_prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", question_prompt),
+            MessagesPlaceholder("chat_history"),
+            ("human", "{input}"),
+        ]
+    )
+    history_retriever = create_history_aware_retriever(
+        llm, retriever, contextualize_prompt
+    )
     
     prompt = ('''
 [Identity]
@@ -66,35 +86,23 @@ question: {input}
 answer:
     ''')
 
-
     qa_prompt = ChatPromptTemplate.from_messages([
         ("system", prompt),
         MessagesPlaceholder("chat_history"),
         ("human", "{input}"),
     ])
 
-    def format_docs(docs):
-        return '\n\n'.join(doc.page_content for doc in docs)
-    
-    inputText = RunnableLambda(lambda x: x["input"])
+    answer_chain = create_stuff_documents_chain(llm, qa_prompt)
 
-    chain_lcel = (
-        {
-            "context" : inputText | database.as_retriever() | format_docs,
-            "input" : inputText,
-            "chat_history" : RunnableLambda(lambda x: x["chat_history"])
-        }
-        | qa_prompt
-        | llm
-        | StrOutputParser()
-    )    
+    rag_chain = create_retrieval_chain(history_retriever, answer_chain)
 
     all_chain = RunnableWithMessageHistory(
-        chain_lcel,
+        rag_chain,
         get_session_history,
         input_messages_key="input",
         history_messages_key="chat_history",
-    )
+        output_messages_key="answer"
+    ).pick("answer")
 
     return all_chain
 
@@ -103,7 +111,7 @@ answer:
 def get_aimessage(user_message, session_id='default'):        
     all_chain = get_retrievalQA()
 
-    aimessage = all_chain.invoke(
+    aimessage = all_chain.stream(
         {"input": user_message},
         config={"configurable":{"session_id": session_id}},
     )
