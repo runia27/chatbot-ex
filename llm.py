@@ -37,21 +37,17 @@ def get_database():
     return database
 
 
+# 세션 아이디 생성
 store = {}
 
 def get_session_history(session_id: str) -> BaseChatMessageHistory:
     if session_id not in store:
         store[session_id] = ChatMessageHistory()
     return store[session_id]
-    
 
-# RetrievalQA 함수 정의
-def get_retrievalQA():
 
-    database = get_database()
-    retriever = database.as_retriever(search_kwargs={'k': 2})
-    llm = get_llm()
-
+# 히스토리 기반 리트리버
+def get_history_retriever(llm, retriever):
     question_prompt = ('''
 - 사용자의 질문이 이전 대화 맥락을 참조한다면, 이를 바탕으로 누구나 이해할 수 있도록 질문을 완전한 문장으로 재작성합니다.
 - 질문이 이미 독립적인 문장이라면 그대로 반환합니다.
@@ -70,7 +66,10 @@ def get_retrievalQA():
     history_retriever = create_history_aware_retriever(
         llm, retriever, contextualize_prompt
     )
-    
+    return history_retriever
+
+
+def get_qa_prompt():
     prompt = ('''
 [Identity]
 - 당신은 전세사기 피해 법률 전문가입니다. 
@@ -91,9 +90,20 @@ answer:
         MessagesPlaceholder("chat_history"),
         ("human", "{input}"),
     ])
+    return qa_prompt
 
+
+# RetrievalQA 함수 정의
+def get_retrievalQA():
+
+    database = get_database()
+    retriever = database.as_retriever(search_kwargs={'k': 2})
+    llm = get_llm()
+
+    history_retriever = get_history_retriever(llm, retriever)
+    qa_prompt = get_qa_prompt()
+    
     answer_chain = create_stuff_documents_chain(llm, qa_prompt)
-
     rag_chain = create_retrieval_chain(history_retriever, answer_chain)
 
     all_chain = RunnableWithMessageHistory(
@@ -108,7 +118,7 @@ answer:
 
 
 ## AI 메세지 함수 정의 
-def get_aimessage(user_message, session_id='default'):        
+def stream_get_aimessage(user_message, session_id='default'):        
     all_chain = get_retrievalQA()
 
     aimessage = all_chain.stream(
@@ -116,3 +126,4 @@ def get_aimessage(user_message, session_id='default'):
         config={"configurable":{"session_id": session_id}},
     )
     return aimessage
+

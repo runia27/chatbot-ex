@@ -1,5 +1,5 @@
 import streamlit as st
-from llm import get_aimessage
+from llm import stream_get_aimessage
 
 
 st.set_page_config(page_title='전세사기피해 상담 챗봇', page_icon='🤖')
@@ -21,10 +21,9 @@ if inputchat := st.chat_input(placeholder="전세사기 피해와 관련된 질�
     
     # 답변 나올 때까지 스피너 
     with st.spinner("답변을 생성하는 중입니다."):
-        aimessage = get_aimessage(inputchat, session_id='default')
+        aimessage = stream_get_aimessage(inputchat, session_id='default')
         
         with st.chat_message("ai"):
             aimessage = st.write_stream(aimessage)
         st.session_state.message_list.append({'role': 'ai', 'content': aimessage})
-
 
