@@ -19,13 +19,13 @@ from config import answer_examlples
 load_dotenv()
 
 # llm 함수 정의
-def get_llm(model="gpt-4o"):
+def load_llm(model="gpt-4o"):
     llm = ChatOpenAI(model=model)
     return llm
 
 
 # 데이터베이스 함수 정의 
-def get_database():
+def load_vectorstore():
     api_key = os.getenv('PINECONE_API_KEY')
     Pinecone(api_key=api_key)
 
@@ -39,7 +39,6 @@ def get_database():
     )
     return database
 
-
 # 세션 아이디 생성
 store = {}
 
@@ -50,7 +49,8 @@ def get_session_history(session_id: str) -> BaseChatMessageHistory:
 
 
 # 히스토리 기반 리트리버
-def get_history_retriever(llm, retriever):
+def build_history_aware_retriever(llm, retriever):
+
     question_prompt = ('''
 - 사용자의 질문이 이전 대화 맥락을 참조한다면, 이를 바탕으로 누구나 이해할 수 있도록 질문을 완전한 문장으로 재작성합니다.
 - 질문이 이미 독립적인 문장이라면 그대로 반환합니다.
@@ -71,8 +71,26 @@ def get_history_retriever(llm, retriever):
     )
     return history_retriever
 
+
+## few shot
+def build_few_shot_examples() -> str:
+
+    example_prompt = PromptTemplate.from_template("Question: {input}\n{answer}")
+
+    few_shot_prompt = FewShotPromptTemplate(
+        examples=answer_examlples,
+        example_prompt=example_prompt,
+        prefix= "다음 질문에 답변하세요 : ",
+        suffix="Question: {input}",
+        input_variables=["input"],
+    )
+   
+    formated_few_shot_prompt = few_shot_prompt.format(input="{input}")
+    return formated_few_shot_prompt
+    
+
 # 
-def get_qa_prompt():
+def build_qa_prompt():
     prompt = ('''
 [Identity]
 - 당신은 전세사기 피해 법률 전문가입니다. 
@@ -88,18 +106,7 @@ question: {input}
 answer:
     ''')
 
-    ## few shot
-    example_prompt = PromptTemplate.from_template("Question: {input}\n{answer}")
-
-    few_shot_prompt = FewShotPromptTemplate(
-        examples=answer_examlples,
-        example_prompt=example_prompt,
-        prefix= "다음 질문에 답변하세요 : ",
-        suffix="Question: {input}",
-        input_variables=["input"],
-    )
-   
-    formated_few_shot_prompt = few_shot_prompt.format(input="{input}")
+    formated_few_shot_prompt = build_few_shot_examples()
 
     qa_prompt = ChatPromptTemplate.from_messages([
     ("system", prompt),
@@ -111,16 +118,15 @@ answer:
     return qa_prompt
 
 
-
 # RetrievalQA 함수 정의
 def get_all_chain():
 
-    database = get_database()
+    database = load_vectorstore()
     retriever = database.as_retriever(search_kwargs={'k': 2})
-    llm = get_llm()
+    llm = load_llm()
 
-    history_retriever = get_history_retriever(llm, retriever)
-    qa_prompt = get_qa_prompt()
+    history_retriever = build_history_aware_retriever(llm, retriever)
+    qa_prompt = build_qa_prompt()
     
     answer_chain = create_stuff_documents_chain(llm, qa_prompt)
     rag_chain = create_retrieval_chain(history_retriever, answer_chain)
