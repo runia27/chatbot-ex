@@ -13,6 +13,7 @@ from langchain_pinecone import PineconeVectorStore
 from pinecone import Pinecone
 
 
+
 load_dotenv()
 
 # llm 함수 정의
@@ -94,7 +95,7 @@ answer:
 
 
 # RetrievalQA 함수 정의
-def get_retrievalQA():
+def get_all_chain():
 
     database = get_database()
     retriever = database.as_retriever(search_kwargs={'k': 2})
@@ -119,11 +120,16 @@ def get_retrievalQA():
 
 ## AI 메세지 함수 정의 
 def stream_get_aimessage(user_message, session_id='default'):        
-    all_chain = get_retrievalQA()
+    all_chain = get_all_chain()
 
     aimessage = all_chain.stream(
         {"input": user_message},
         config={"configurable":{"session_id": session_id}},
     )
+
+    print(f"대화이력: {get_session_history(session_id).messages} \n🐾\n")
+    print('=' * 50)
+    print(f"{session_id}")
+
     return aimessage
 
