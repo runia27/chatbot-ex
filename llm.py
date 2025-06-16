@@ -91,10 +91,71 @@ def build_few_shot_examples() -> str:
 
 # 
 def build_qa_prompt():
+    ## [keyword dictionary]
+    # 1. 기본형태 : 키 하나당 설명 하나, 단순하고 빠름
+    # 용도 : FAQ 챗봇, 버튼식 응답
+    # 2. 질문형태 : 유사한 질문에 여러 키로 분기하며 모두 같은 대답으로 연결, fallback 대응
+    # 용도 : 단답 챗봇, 키워드 FAQ 챗봇
+    # 3. 키워드 _ 태그 기반
+
+    
+    keyword_dictionary = {
+#         '임대인': '''
+# 임대인 또는 다음 각 목의 어느 하나에 해당하는 자를 말한다.
+# 가. 임대인의 대리인, 그 밖에 임대인을 위하여 주택의 임대에 관하여 업무를 처리하는 자
+# 나. 임대인의 의뢰를 받은 공인중개사(중개보조인을 포함한다)
+# 다. 임대인을 위하여 임차인을 모집하는 자(그 피고용인을 포함한다)
+# 라. 다수 임대인의 배후에 있는 동일인
+# 마. 라목의 동일인이 지배하거나 경제적 이익을 공유하는 조직
+# 바. 라목의 동일인이나 마목의 조직을 배후에 둔 다수의 임대인
+#     ''',
+#         '주택': '''
+# 「주택임대차보호법」 제2조에 따른 주거용 건물(공부상 주거용 건물이 아니라도 임대차계약 체결 당시 임대차목적물의 구조와 실질이 주거용 건물이고 임차인의 실제 용도가 주거용인 경우를 포함한다)을 말한다.
+#     ''',
+#         '임대인 알려줘': '''
+# 임대인은 다음과 같은 의미를 가집니다:
+
+# 기본 정의:
+# 임대인은 주택 등을 소유하고 이를 다른 사람에게 빌려주는 자를 의미합니다. 보통 임차인으로부터 임대료를 받고 주거 또는 사용을 허락합니다.
+
+# 대리인 및 위임자:
+# 임대인을 대신하여 임대 업무를 처리할 수 있는 대리인도 임대인의 범주에 포함됩니다.
+# 임대인의 대리인은 주택의 임대에 관한 업무를 수행하는 사람입니다.
+
+# 공인중개사 포함:
+# 임대인의 의뢰를 받아 임차인과의 계약을 중개하는 공인중개사도 임대인의 범주에 들어갈 수 있습니다.
+
+# 임차인 모집자:
+# 임대인을 대신해 임차인을 모집하는 자도 포함됩니다. 이는 피고용인을 포함한 경우도 해당됩니다.
+
+# 다수 임대인의 동일인 배후자:
+# 여러 임대인을 뒤에서 지배하거나 경제적 이익을 공유하는 동일인도 임대인으로 간주될 수 있습니다.
+
+# 조직 및 경제 공유:
+# 동일인이 지배하는 조직 또는 경제적 이익을 공유하는 조직이 포함되며, 이들이 배후에 있는 다수의 임대인도 임대인으로 볼 수 있습니다.
+# 이러한 내용은 특정 법적 상황에서 '임대인'의 정의가 어떻게 확장될 수 있는지를 보여줍니다. (전세사기피해자법)    
+#     ''',    
+    '임대인' : {
+        'definition': '전세사기피해자법 제2조 2항에서 임대인을 정의합니다',
+        'source': '전세사기피해자법 제2조',
+        'tags': ['법률', '용어', '기초'],
+        },
+    '주택' : {
+        'definition': '전세사기피해자법 제2조 1항에서 주택을 정의합니다',
+        'source': '전세사기피해자법 제2조',
+        'tags': ['법률', '용어', '기초'],
+        },
+    }
+
+    dictionary_text = '\n'.join([
+        f"{k} ({', '.join(v['tags'])}): {v['definition']} [출처: {v['source']}])" 
+        for k, v in keyword_dictionary.items()
+    ])
+
     prompt = ('''
 [Identity]
 - 당신은 전세사기 피해 법률 전문가입니다. 
-- "context"를 참고해 질문에 대해 일목요연하고 구체적으로 답변하세요. 
+- "context"와 "keyward_dictionary"를 참고해 질문에 대해 일목요연하고 구체적으로 답변하세요. 
 - 항목별로 표시해서 답변해주세요. 
 - 답변 마지막 부분에는 관련 법조항을 소괄호 안에 넣어 같이 명시해주세요. 
 - 어떤 것에 대해 알려달라는 질문은 어떤 것에 대해 설명해달라는 말과 같습니다. 
@@ -102,7 +163,8 @@ def build_qa_prompt():
 - 관련되지 않은 질문에는 전세사기와 관련된 비슷한 질문을 물어본게 맞는지 되묻습니다.
 
 context: {context}       
-question: {input}                                   
+question: {input}    
+keyword_dictionary: {dictionary_text}                               
 answer:
     ''')
 
@@ -113,7 +175,7 @@ answer:
     ("assistant", formated_few_shot_prompt),
     MessagesPlaceholder("chat_history"),
     ("human", "{input}"),
-    ])
+    ]).partial(dictionary_text=dictionary_text)
     
     return qa_prompt
 
@@ -154,6 +216,10 @@ def stream_get_aimessage(user_message, session_id='default'):
     print(f"대화이력: {get_session_history(session_id).messages} \n🐾\n")
     print('=' * 50)
     print(f"{session_id}")
+
+    retriever = load_vectorstore().as_retriever(search_kwargs={'k': 2})
+    search_result = retriever.invoke(user_message)
+    print(f"\n검색결과 : \n{search_result}")
 
     return aimessage
 
